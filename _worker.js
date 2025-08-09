@@ -35,6 +35,22 @@ const CORS_HEADER_OPTIONS = {
   "Access-Control-Max-Age": "86400",
 };
 
+// ===== Telegram Bot (configurable) =====
+const BOT_WELCOME_TITLE = "Selamat datang di server DIANA STORE";
+const BOT_WELCOME_TEXT = [
+  "<b>Selamat datang di server DIANA STORE</b>",
+  "",
+  "<b>TUJUAN BOT</b>",
+  "- Mengakses daftar proxy dan membuat konfigurasi VLESS/Trojan",
+  "",
+  "<b>PERATURAN BOT</b>",
+  "- Jangan spam perintah",
+  "- Gunakan dengan bijak",
+  "",
+  "<b>DAN SANKSI</b>",
+  "- Pelanggaran dapat dikenai pemblokiran akses",
+].join("\n");
+
 async function getKVProxyList(kvProxyUrl = KV_PROXY_URL) {
   if (!kvProxyUrl) {
     throw new Error("No KV Proxy URL Provided!");
@@ -79,6 +95,100 @@ async function getProxyList(proxyBankUrl = PROXY_BANK_URL) {
   }
 
   return cachedProxyList;
+}
+
+// ===== Telegram helpers =====
+function tgApiUrl(token, method) {
+  return `https://api.telegram.org/bot${token}/${method}`;
+}
+
+async function tgSend(token, payload) {
+  return fetch(tgApiUrl(token, "sendMessage"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+async function tgEdit(token, payload) {
+  return fetch(tgApiUrl(token, "editMessageText"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+function chunkArray(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
+function buildCountriesKeyboard(proxies) {
+  const countries = Array.from(new Set(proxies.map((p) => p.country))).sort();
+  const rows = [];
+  for (const chunk of chunkArray(countries, 3)) {
+    rows.push(
+      chunk.map((cc) => ({ text: getFlagEmoji(cc) + " " + cc, callback_data: `country:${cc}` }))
+    );
+  }
+  rows.push([{ text: "⬅️ Kembali ke Menu", callback_data: "back:menu" }]);
+  return { inline_keyboard: rows };
+}
+
+function buildProxyKeyboard(cc, proxies) {
+  const list = proxies.filter((p) => p.country === cc).slice(0, 30);
+  const rows = [];
+  for (const chunk of chunkArray(list, 2)) {
+    rows.push(
+      chunk.map((p) => ({ text: `${p.proxyIP}:${p.proxyPort} · ${p.org.slice(0, 18)}`, callback_data: `proxy:${p.proxyIP}:${p.proxyPort}:${cc}` }))
+    );
+  }
+  rows.push([{ text: "⬅️ Negara", callback_data: "back:countries" }, { text: "⬅️ Menu", callback_data: "back:menu" }]);
+  return { inline_keyboard: rows };
+}
+
+function buildProtocolKeyboard(ip, port, cc) {
+  const rows = [
+    [
+      { text: "VLESS TLS", callback_data: `proto:${ip}:${port}:${cc}:vless:443` },
+      { text: "VLESS Non-TLS", callback_data: `proto:${ip}:${port}:${cc}:vless:80` },
+    ],
+    [
+      { text: "TROJAN TLS", callback_data: `proto:${ip}:${port}:${cc}:trojan:443` },
+      { text: "TROJAN Non-TLS", callback_data: `proto:${ip}:${port}:${cc}:trojan:80` },
+    ],
+    [{ text: "⬅️ Proxy", callback_data: `back:proxy:${cc}` }, { text: "⬅️ Menu", callback_data: "back:menu" }],
+  ];
+  return { inline_keyboard: rows };
+}
+
+function buildAgreeKeyboard() {
+  return { inline_keyboard: [[{ text: "SAYA SETUJU", callback_data: "agree" }]] };
+}
+
+function escapeHTML(s) {
+  return s
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\"", "&quot;");
+}
+
+function buildConfigSample(host, ip, port, cc, protocol, outPort) {
+  const uuid = crypto.randomUUID();
+  const uri = new URL(`${reverse("najort")}://${host}`);
+  uri.searchParams.set("encryption", "none");
+  uri.searchParams.set("type", "ws");
+  uri.searchParams.set("host", host);
+  uri.protocol = protocol;
+  uri.port = outPort.toString();
+  uri.username = uuid;
+  uri.searchParams.set("security", outPort == 443 ? "tls" : "none");
+  uri.searchParams.set("sni", outPort == 80 && protocol == reverse("sselv") ? "" : host);
+  uri.searchParams.set("path", `/${ip}-${port}`);
+  uri.hash = `${getFlagEmoji(cc)} ${protocol.toUpperCase()} WS ${outPort == 443 ? "TLS" : "NTLS"} [${serviceName}]`;
+  return uri.toString();
 }
 
 async function reverseProxy(request, target, targetPath) {
@@ -206,6 +316,114 @@ export default {
           proxyIP = proxyMatch[1];
           return await websocketHandler(request);
         }
+      }
+
+      // ===== Telegram Webhook =====
+      if (url.pathname.startsWith("/telegram/webhook") && request.method === "POST") {
+        const secret = url.searchParams.get("secret");
+        if (env.BOT_WEBHOOK_SECRET && secret !== env.BOT_WEBHOOK_SECRET) {
+          return new Response("Forbidden", { status: 403 });
+        }
+        if (!env.BOT_TOKEN) {
+          return new Response("Bot token missing", { status: 500 });
+        }
+
+        const update = await request.json();
+        const token = env.BOT_TOKEN;
+
+        const chat = update.message?.chat || update.callback_query?.message?.chat;
+        const chatId = chat?.id;
+        const messageId = update.callback_query?.message?.message_id;
+        const text = update.message?.text || "";
+        const data = update.callback_query?.data || "";
+
+        const proxyBankUrl = env.PROXY_BANK_URL;
+        const proxies = await getProxyList(proxyBankUrl);
+
+        // Commands
+        if (text.startsWith("/start")) {
+          await tgSend(token, {
+            chat_id: chatId,
+            text: BOT_WELCOME_TEXT,
+            parse_mode: "HTML",
+            reply_markup: buildAgreeKeyboard(),
+          });
+          return new Response("OK");
+        }
+
+        // Callback handlers
+        if (data === "agree" || data === "back:countries") {
+          const kb = buildCountriesKeyboard(proxies);
+          const payload = {
+            chat_id: chatId,
+            message_id: messageId,
+            text: "Pilih negara:",
+            reply_markup: kb,
+          };
+          if (messageId) await tgEdit(token, payload); else await tgSend(token, payload);
+          return new Response("OK");
+        }
+
+        if (data.startsWith("country:")) {
+          const cc = data.split(":")[1];
+          const kb = buildProxyKeyboard(cc, proxies);
+          const payload = {
+            chat_id: chatId,
+            message_id: messageId,
+            text: `Daftar proxy untuk ${getFlagEmoji(cc)} ${cc}`,
+            reply_markup: kb,
+          };
+          if (messageId) await tgEdit(token, payload); else await tgSend(token, payload);
+          return new Response("OK");
+        }
+
+        if (data.startsWith("proxy:")) {
+          const [, ip, port, cc] = data.split(":");
+          const kb = buildProtocolKeyboard(ip, port, cc);
+          const payload = {
+            chat_id: chatId,
+            message_id: messageId,
+            text: `Proxy dipilih: ${ip}:${port} (${getFlagEmoji(cc)} ${cc})\nPilih protokol:`,
+            reply_markup: kb,
+          };
+          if (messageId) await tgEdit(token, payload); else await tgSend(token, payload);
+          return new Response("OK");
+        }
+
+        if (data.startsWith("proto:")) {
+          const [, ip, port, cc, protocol, outPort] = data.split(":");
+          const host = request.headers.get("Host") || APP_DOMAIN;
+          const config = buildConfigSample(host, ip, port, cc, protocol, parseInt(outPort));
+          const payload = {
+            chat_id: chatId,
+            message_id: messageId,
+            text: `<b>Konfigurasi</b>\n<code>${escapeHTML(config)}</code>`,
+            parse_mode: "HTML",
+            reply_markup: { inline_keyboard: [[{ text: "⬅️ Kembali ke Menu", callback_data: "back:menu" }]] },
+          };
+          if (messageId) await tgEdit(token, payload); else await tgSend(token, payload);
+          return new Response("OK");
+        }
+
+        if (data.startsWith("back:proxy:")) {
+          const cc = data.split(":")[2];
+          const kb = buildProxyKeyboard(cc, proxies);
+          const payload = { chat_id: chatId, message_id: messageId, text: `Daftar proxy untuk ${getFlagEmoji(cc)} ${cc}` , reply_markup: kb };
+          if (messageId) await tgEdit(token, payload); else await tgSend(token, payload);
+          return new Response("OK");
+        }
+
+        if (data === "back:menu") {
+          const payload = { chat_id: chatId, message_id: messageId, text: BOT_WELCOME_TEXT, parse_mode: "HTML", reply_markup: buildAgreeKeyboard() };
+          if (messageId) await tgEdit(token, payload); else await tgSend(token, payload);
+          return new Response("OK");
+        }
+
+        // Default fallback for unrecognized update
+        if (chatId) {
+          await tgSend(token, { chat_id: chatId, text: "Perintah tidak dikenali. Gunakan /start" });
+        }
+        return new Response("OK");
       }
 
       if (url.pathname.startsWith("/sub")) {
