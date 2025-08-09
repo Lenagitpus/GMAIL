@@ -3,8 +3,8 @@ import { connect } from "cloudflare:sockets";
 // import { Buffer } from "node:buffer";
 
 // Variables
-const rootDomain = "foolvpn.me"; // Ganti dengan domain utama kalian
-const serviceName = "nautica"; // Ganti dengan nama workers kalian
+const rootDomain = "ahem7535.workers.dev"; // Ganti dengan domain utama kalian
+const serviceName = "server"; // Ganti dengan nama workers kalian
 const apiKey = ""; // Ganti dengan Global API key kalian (https://dash.cloudflare.com/profile/api-tokens)
 const apiEmail = ""; // Ganti dengan email yang kalian gunakan
 const accountID = ""; // Ganti dengan Account ID kalian (https://dash.cloudflare.com -> Klik domain yang kalian gunakan)
@@ -52,7 +52,7 @@ const BOT_WELCOME_TEXT = [
 ].join("\n");
 
 // Optional: isi di sini jika deploy manual (env akan meng-overwrite jika di-set)
-const BOT_TOKEN = ""; // contoh: "123456:ABC-DEF..."
+const BOT_TOKEN = "8071791373:AAH7F6ayxwgVP6HauRxm740FgBP4cJQiqGU"; // contoh: "123456:ABC-DEF..."
 const BOT_WEBHOOK_SECRET = ""; // contoh: "rahasia-unik-webhook"
 
 async function getKVProxyList(kvProxyUrl = KV_PROXY_URL) {
