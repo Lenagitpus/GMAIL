@@ -51,6 +51,10 @@ const BOT_WELCOME_TEXT = [
   "- Pelanggaran dapat dikenai pemblokiran akses",
 ].join("\n");
 
+// Optional: isi di sini jika deploy manual (env akan meng-overwrite jika di-set)
+const BOT_TOKEN = ""; // contoh: "123456:ABC-DEF..."
+const BOT_WEBHOOK_SECRET = ""; // contoh: "rahasia-unik-webhook"
+
 async function getKVProxyList(kvProxyUrl = KV_PROXY_URL) {
   if (!kvProxyUrl) {
     throw new Error("No KV Proxy URL Provided!");
@@ -321,15 +325,16 @@ export default {
       // ===== Telegram Webhook =====
       if (url.pathname.startsWith("/telegram/webhook") && request.method === "POST") {
         const secret = url.searchParams.get("secret");
-        if (env.BOT_WEBHOOK_SECRET && secret !== env.BOT_WEBHOOK_SECRET) {
+        const token = env.BOT_TOKEN || BOT_TOKEN;
+        const webhookSecret = env.BOT_WEBHOOK_SECRET || BOT_WEBHOOK_SECRET;
+        if (webhookSecret && secret !== webhookSecret) {
           return new Response("Forbidden", { status: 403 });
         }
-        if (!env.BOT_TOKEN) {
+        if (!token) {
           return new Response("Bot token missing", { status: 500 });
         }
 
         const update = await request.json();
-        const token = env.BOT_TOKEN;
 
         const chat = update.message?.chat || update.callback_query?.message?.chat;
         const chatId = chat?.id;
