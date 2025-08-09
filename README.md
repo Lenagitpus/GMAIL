@@ -96,3 +96,13 @@ Berikut cara aktivasinya:
 
 - Hal aneh lain yang saya kerjakan [FoolVPN](https://t.me/foolvpn)
 - Tanya-tanya -> [Telegram](https://t.me/d_fordlalatina)
+
+## Telegram Bot
+
+- Bot akan mengirim foto QR saat perintah `/start`.
+- Admin commands (set `ADMIN_IDS` env, comma separated Telegram user IDs):
+  - `listuser`: tampilkan daftar pengguna dan tombol inline untuk Ban
+  - `banduser`/`banuser`: langsung tampilkan daftar pengguna untuk diblokir
+  - `unbanuser`: tampilkan daftar pengguna yang diblokir untuk di-unban
+
+Catatan: Data user dan banned disimpan di KV binding `KV`. Saat preview (tanpa KV), data hanya in-memory.
