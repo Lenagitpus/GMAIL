@@ -11,5 +11,4 @@ enabled = true
 
 [[kv_namespaces]]
 binding = "KV"
-id = "${KV_NAMESPACE_ID}"
-preview_id = "${KV_NAMESPACE_PREVIEW_ID}"
+id = "06d1b6331dcb48018e5df3130307436f"
