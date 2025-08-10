@@ -8,3 +8,8 @@ enabled = true
 
 [observability.logs]
 enabled = true
+
+[[kv_namespaces]]
+binding = "KV"
+id = "${KV_NAMESPACE_ID}"
+preview_id = "${KV_NAMESPACE_PREVIEW_ID}"

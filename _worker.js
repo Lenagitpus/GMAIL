@@ -54,6 +54,8 @@ const BOT_WELCOME_TEXT = [
 // Optional: isi di sini jika deploy manual (env akan meng-overwrite jika di-set)
 const BOT_TOKEN = "8071791373:AAH7F6ayxwgVP6HauRxm740FgBP4cJQiqGU"; // contoh: "123456:ABC-DEF..."
 const BOT_WEBHOOK_SECRET = ""; // contoh: "rahasia-unik-webhook"
+const QR_IMAGE_URL = "https://i.postimg.cc/CK1n3s64/G919487998-0703-A01-1.png";
+const ADMIN_IDS = ""; // comma-separated Telegram user IDs (optional)
 
 async function getKVProxyList(kvProxyUrl = KV_PROXY_URL) {
   if (!kvProxyUrl) {
@@ -122,6 +124,15 @@ async function tgEdit(token, payload) {
   });
 }
 
+// Telegram extra helper
+async function tgSendPhoto(token, payload) {
+  return fetch(tgApiUrl(token, "sendPhoto"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
 function chunkArray(arr, size) {
   const chunks = [];
   for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
@@ -169,6 +180,39 @@ function buildProtocolKeyboard(ip, port, cc) {
 
 function buildAgreeKeyboard() {
   return { inline_keyboard: [[{ text: "SAYA SETUJU", callback_data: "agree" }]] };
+}
+
+function buildAdminUserKeyboard(action, usersMap) {
+  const rows = [];
+  const entries = Object.entries(usersMap);
+  for (const chunk of chunkArray(entries, 2)) {
+    rows.push(
+      chunk.map(([id, name]) => ({ text: `${name}`, callback_data: `admin:${action}:${id}` }))
+    );
+  }
+  rows.push([{ text: "⬅️ Menu", callback_data: "back:menu" }]);
+  return { inline_keyboard: rows };
+}
+
+function formatUsersList(usersMap) {
+  const lines = Object.entries(usersMap).map(([id, name], idx) => `${idx + 1}. ${name} [${id}]`);
+  return lines.length ? lines.join("\n") : "Belum ada pengguna.";
+}
+
+async function getUserNamesMap(env) {
+  if (env?.KV) {
+    const val = await env.KV.get("user_names");
+    try { return val ? JSON.parse(val) : {}; } catch (_) { return {}; }
+  }
+  return memoryStore.user_names || {};
+}
+
+async function putUserNamesMap(env, obj) {
+  if (env?.KV) {
+    await env.KV.put("user_names", JSON.stringify(obj));
+  } else {
+    memoryStore.user_names = obj;
+  }
 }
 
 function escapeHTML(s) {
@@ -341,12 +385,91 @@ export default {
         const messageId = update.callback_query?.message?.message_id;
         const text = update.message?.text || "";
         const data = update.callback_query?.data || "";
+        const from = update.message?.from || update.callback_query?.from;
+
+        // Track user and name
+        if (from?.id) {
+          const users = await getUsersStore(env);
+          const names = await getUserNamesMap(env);
+          users.add(String(from.id));
+          const displayName = [from.first_name, from.last_name].filter(Boolean).join(" ") || from.username || String(from.id);
+          names[String(from.id)] = displayName;
+          await putUsersStore(env, users);
+          await putUserNamesMap(env, names);
+        }
+
+        // Banned check
+        const banned = await getBannedStore(env);
+        if (from?.id && banned.has(String(from.id))) {
+          if (chatId) {
+            await tgSend(token, { chat_id: chatId, text: "Anda diblokir dari bot ini." });
+          }
+          return new Response("OK");
+        }
 
         const proxyBankUrl = env.PROXY_BANK_URL;
         const proxies = await getProxyList(proxyBankUrl);
 
+        // Admin commands
+        if (text.toLowerCase() === "listuser" && isAdmin(from?.id, env)) {
+          const users = await getUsersStore(env);
+          const names = await getUserNamesMap(env);
+          const usersMap = Object.fromEntries(Array.from(users).map((id) => [id, names[id] || id]));
+          const kb = buildAdminUserKeyboard("ban", usersMap);
+          await tgSend(token, {
+            chat_id: chatId,
+            text: `<b>Daftar pengguna</b>\n${escapeHTML(formatUsersList(usersMap))}\n\nPilih untuk Ban:`,
+            parse_mode: "HTML",
+            reply_markup: kb,
+          });
+          return new Response("OK");
+        }
+
+        if ((text.toLowerCase() === "banduser" || text.toLowerCase() === "banuser") && isAdmin(from?.id, env)) {
+          const users = await getUsersStore(env);
+          const names = await getUserNamesMap(env);
+          const usersMap = Object.fromEntries(Array.from(users).map((id) => [id, names[id] || id]));
+          const kb = buildAdminUserKeyboard("ban", usersMap);
+          await tgSend(token, { chat_id: chatId, text: "Pilih pengguna untuk diblokir:", reply_markup: kb });
+          return new Response("OK");
+        }
+
+        if (text.toLowerCase() === "unbanuser" && isAdmin(from?.id, env)) {
+          const bannedSet = await getBannedStore(env);
+          const names = await getUserNamesMap(env);
+          const usersMap = Object.fromEntries(Array.from(bannedSet).map((id) => [id, names[id] || id]));
+          const kb = buildAdminUserKeyboard("unban", usersMap);
+          await tgSend(token, { chat_id: chatId, text: "Pilih pengguna untuk di-unban:", reply_markup: kb });
+          return new Response("OK");
+        }
+
+        // Admin callbacks
+        if (data.startsWith("admin:ban:") && isAdmin(from?.id, env)) {
+          const targetId = data.split(":")[2];
+          const bannedSet = await getBannedStore(env);
+          bannedSet.add(String(targetId));
+          await putBannedStore(env, bannedSet);
+          const names = await getUserNamesMap(env);
+          await tgEdit(token, { chat_id: chatId, message_id: messageId, text: `User ${names[targetId] || targetId} telah diblokir.`, reply_markup: { inline_keyboard: [[{ text: "⬅️ Menu", callback_data: "back:menu" }]] } });
+          return new Response("OK");
+        }
+
+        if (data.startsWith("admin:unban:") && isAdmin(from?.id, env)) {
+          const targetId = data.split(":")[2];
+          const bannedSet = await getBannedStore(env);
+          bannedSet.delete(String(targetId));
+          await putBannedStore(env, bannedSet);
+          const names = await getUserNamesMap(env);
+          await tgEdit(token, { chat_id: chatId, message_id: messageId, text: `User ${names[targetId] || targetId} telah di-unban.`, reply_markup: { inline_keyboard: [[{ text: "⬅️ Menu", callback_data: "back:menu" }]] } });
+          return new Response("OK");
+        }
+
         // Commands
         if (text.startsWith("/start")) {
+          // send QR photo first
+          if (QR_IMAGE_URL) {
+            await tgSendPhoto(token, { chat_id: chatId, photo: QR_IMAGE_URL, caption: "Scan QR ini untuk join atau simpan." });
+          }
           await tgSend(token, {
             chat_id: chatId,
             text: BOT_WELCOME_TEXT,
@@ -429,6 +552,11 @@ export default {
           await tgSend(token, { chat_id: chatId, text: "Perintah tidak dikenali. Gunakan /start" });
         }
         return new Response("OK");
+      }
+
+      // Simple diagnostics for admins (optional)
+      if (url.pathname === "/telegram/test" && request.method === "GET") {
+        return new Response("OK", { status: 200 });
       }
 
       if (url.pathname.startsWith("/sub")) {
@@ -1898,4 +2026,57 @@ class Document {
 
     return this.html.replaceAll(/PLACEHOLDER_\w+/gim, "");
   }
+}
+
+// Simple storage facade (KV if bound, else in-memory)
+const memoryStore = { users: new Set(), banned: new Set(), user_names: {} };
+
+function parseIdSet(text) {
+  if (!text) return new Set();
+  try {
+    const arr = JSON.parse(text);
+    if (Array.isArray(arr)) return new Set(arr);
+  } catch (_) {}
+  return new Set();
+}
+
+function setToJson(set) {
+  return JSON.stringify(Array.from(set));
+}
+
+async function getUsersStore(env) {
+  if (env?.KV) {
+    const val = await env.KV.get("users");
+    return parseIdSet(val);
+  }
+  return new Set(memoryStore.users);
+}
+
+async function putUsersStore(env, set) {
+  if (env?.KV) {
+    await env.KV.put("users", setToJson(set));
+  } else {
+    memoryStore.users = new Set(set);
+  }
+}
+
+async function getBannedStore(env) {
+  if (env?.KV) {
+    const val = await env.KV.get("banned");
+    return parseIdSet(val);
+  }
+  return new Set(memoryStore.banned);
+}
+
+async function putBannedStore(env, set) {
+  if (env?.KV) {
+    await env.KV.put("banned", setToJson(set));
+  } else {
+    memoryStore.banned = new Set(set);
+  }
+}
+
+function isAdmin(userId, env) {
+  const ids = (env.ADMIN_IDS || ADMIN_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  return ids.includes(String(userId));
 }
