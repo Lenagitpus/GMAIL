@@ -49,6 +49,7 @@ const BOT_WELCOME_TEXT = [
   "",
   "<b>DAN SANKSI</b>",
   "- Pelanggaran dapat dikenai pemblokiran akses",
+  "- HUBUNGI ADMIN WA 085723657734",
 ].join("\n");
 
 // Optional: isi di sini jika deploy manual (env akan meng-overwrite jika di-set)
