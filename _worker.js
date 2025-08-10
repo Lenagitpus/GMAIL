@@ -179,7 +179,10 @@ function buildProtocolKeyboard(ip, port, cc) {
 }
 
 function buildAgreeKeyboard() {
-  return { inline_keyboard: [[{ text: "SAYA SETUJU", callback_data: "agree" }]] };
+  return { inline_keyboard: [
+    [{ text: "SAYA SETUJU", callback_data: "agree" }],
+    [{ text: "🔍 SCAN IP DAPATKAN AKUN", callback_data: "scan:start" }]
+  ] };
 }
 
 function buildAdminUserKeyboard(action, usersMap) {
@@ -464,11 +467,18 @@ export default {
           return new Response("OK");
         }
 
+        // Scan feature callbacks
+        if (data === "scan:start") {
+          await setUserState(env, from?.id, "awaiting_scan_input");
+          await tgSend(token, { chat_id: chatId, text: "Kirim IP:PORT yang ingin di-scan. Contoh: 1.2.3.4:443 atau 1.2.3.4 443" });
+          return new Response("OK");
+        }
+
         // Commands
         if (text.startsWith("/start")) {
           // send QR photo first
           if (QR_IMAGE_URL) {
-            await tgSendPhoto(token, { chat_id: chatId, photo: QR_IMAGE_URL, caption: "Scan QR ini untuk join atau simpan." });
+            await tgSendPhoto(token, { chat_id: chatId, photo: QR_IMAGE_URL, caption: "Dukung pengembangan bot dan peningkatan fitur premium. Scan QR untuk donasi. Terima kasih! ❤️" });
           }
           await tgSend(token, {
             chat_id: chatId,
@@ -477,6 +487,50 @@ export default {
             reply_markup: buildAgreeKeyboard(),
           });
           return new Response("OK");
+        }
+
+        // If awaiting scan input
+        const state = await getUserState(env, from?.id);
+        if (state === "awaiting_scan_input" && text && !data) {
+          // parse input
+          let ip = ""; let port = "";
+          const t = text.trim();
+          if (t.includes(":")) {
+            const parts = t.split(":").map((s)=>s.trim());
+            ip = parts[0]; port = parts[1] || "";
+          } else {
+            const parts = t.split(/\s+/);
+            ip = parts[0]; port = parts[1] || "";
+          }
+          // basic validation
+          const portNum = parseInt(port, 10);
+          const ipOk = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(ip);
+          const portOk = Number.isInteger(portNum) && portNum > 0 && portNum < 65536;
+          if (!ipOk || !portOk) {
+            await tgSend(token, { chat_id: chatId, text: "Format tidak valid. Kirim seperti: 1.2.3.4:443" });
+            return new Response("OK");
+          }
+
+          // do health check
+          try {
+            const result = await checkProxyHealth(ip, String(portNum));
+            const active = result?.active === true || result?.ok === true || result?.status === "ok";
+            if (!active) {
+              await setUserState(env, from?.id, null);
+              await tgSend(token, { chat_id: chatId, text: `Proxy ${ip}:${portNum} tidak aktif.` });
+              return new Response("OK");
+            }
+            // active
+            await setUserState(env, from?.id, null);
+            const cc = result?.country || "XX"; // fallback
+            const kb = buildProtocolKeyboard(ip, String(portNum), cc);
+            await tgSend(token, { chat_id: chatId, text: `Proxy aktif: ${ip}:${portNum}\nPilih protokol:`, reply_markup: kb });
+            return new Response("OK");
+          } catch (err) {
+            await setUserState(env, from?.id, null);
+            await tgSend(token, { chat_id: chatId, text: `Gagal scan: ${(err && err.message) || "error"}` });
+            return new Response("OK");
+          }
         }
 
         // Callback handlers
@@ -2029,7 +2083,7 @@ class Document {
 }
 
 // Simple storage facade (KV if bound, else in-memory)
-const memoryStore = { users: new Set(), banned: new Set(), user_names: {} };
+const memoryStore = { users: new Set(), banned: new Set(), user_names: {}, states: {} };
 
 function parseIdSet(text) {
   if (!text) return new Set();
@@ -2079,4 +2133,27 @@ async function putBannedStore(env, set) {
 function isAdmin(userId, env) {
   const ids = (env.ADMIN_IDS || ADMIN_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
   return ids.includes(String(userId));
+}
+
+async function getUserState(env, userId) {
+  if (!userId) return null;
+  if (env?.KV) {
+    return (await env.KV.get(`state:${userId}`)) || null;
+  }
+  const states = memoryStore.states || {};
+  return states[userId] || null;
+}
+
+async function setUserState(env, userId, value) {
+  if (!userId) return;
+  if (env?.KV) {
+    if (value === null) {
+      await env.KV.delete(`state:${userId}`);
+    } else {
+      await env.KV.put(`state:${userId}`, value);
+    }
+  } else {
+    memoryStore.states = memoryStore.states || {};
+    if (value === null) delete memoryStore.states[userId]; else memoryStore.states[userId] = value;
+  }
 }
