@@ -52,10 +52,10 @@ const BOT_WELCOME_TEXT = [
 ].join("\n");
 
 // Optional: isi di sini jika deploy manual (env akan meng-overwrite jika di-set)
-const BOT_TOKEN = "8071791373:AAH7F6ayxwgVP6HauRxm740FgBP4cJQiqGU"; // contoh: "123456:ABC-DEF..."
+const BOT_TOKEN = "7548104199:AAHoSQVeC3mqygvyX6mruRXL9EXEKZ5JZdQ"; // contoh: "123456:ABC-DEF..."
 const BOT_WEBHOOK_SECRET = ""; // contoh: "rahasia-unik-webhook"
 const QR_IMAGE_URL = "https://i.postimg.cc/CK1n3s64/G919487998-0703-A01-1.png";
-const ADMIN_IDS = ""; // comma-separated Telegram user IDs (optional)
+const ADMIN_IDS = "7662568043"; // comma-separated Telegram user IDs (optional)
 
 async function getKVProxyList(kvProxyUrl = KV_PROXY_URL) {
   if (!kvProxyUrl) {
