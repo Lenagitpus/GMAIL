@@ -53,7 +53,7 @@ const BOT_WELCOME_TEXT = [
 ].join("\n");
 
 // Optional: isi di sini jika deploy manual (env akan meng-overwrite jika di-set)
-const BOT_TOKEN = "7548104199:AAHoSQVeC3mqygvyX6mruRXL9EXEKZ5JZdQ"; // contoh: "123456:ABC-DEF..."
+const BOT_TOKEN = "7725213177:AAGmBUXqsEDGlQmsOwG6Fp_4_7ZXquAkB8I"; // contoh: "123456:ABC-DEF..."
 const BOT_WEBHOOK_SECRET = ""; // contoh: "rahasia-unik-webhook"
 const QR_IMAGE_URL = "https://i.postimg.cc/CK1n3s64/G919487998-0703-A01-1.png";
 const ADMIN_IDS = "7662568043"; // comma-separated Telegram user IDs (optional)
