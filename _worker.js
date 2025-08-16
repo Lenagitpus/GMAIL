@@ -56,7 +56,7 @@ const BOT_WELCOME_TEXT = [
 const BOT_TOKEN = "7748974658:AAEEVX_eouNZnkptqSLl9KVJ2XvUS64wsps"; // contoh: "123456:ABC-DEF..."
 const BOT_WEBHOOK_SECRET = "dedi"; // contoh: "rahasia-unik-webhook"
 const QR_IMAGE_URL = "https://i.postimg.cc/CK1n3s64/G919487998-0703-A01-1.png";
-const ADMIN_IDS = "7662568043"; // comma-separated Telegram user IDs (optional)
+const ADMIN_IDS = ""; // comma-separated Telegram user IDs (optional)
 
 async function getKVProxyList(kvProxyUrl = KV_PROXY_URL) {
   if (!kvProxyUrl) {
