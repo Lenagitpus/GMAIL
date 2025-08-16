@@ -4,7 +4,7 @@ import { connect } from "cloudflare:sockets";
 
 // Variables
 const rootDomain = "ahem7535.workers.dev"; // Ganti dengan domain utama kalian
-const serviceName = "server"; // Ganti dengan nama workers kalian
+const serviceName = "vserver"; // Ganti dengan nama workers kalian
 const apiKey = ""; // Ganti dengan Global API key kalian (https://dash.cloudflare.com/profile/api-tokens)
 const apiEmail = ""; // Ganti dengan email yang kalian gunakan
 const accountID = ""; // Ganti dengan Account ID kalian (https://dash.cloudflare.com -> Klik domain yang kalian gunakan)
@@ -53,7 +53,7 @@ const BOT_WELCOME_TEXT = [
 ].join("\n");
 
 // Optional: isi di sini jika deploy manual (env akan meng-overwrite jika di-set)
-const BOT_TOKEN = "7725213177:AAGmBUXqsEDGlQmsOwG6Fp_4_7ZXquAkB8I"; // contoh: "123456:ABC-DEF..."
+const BOT_TOKEN = "8383144033:AAEaw9nSnVfT8wXsk-cfx96ruiIE0IgA_dM"; // contoh: "123456:ABC-DEF..."
 const BOT_WEBHOOK_SECRET = ""; // contoh: "rahasia-unik-webhook"
 const QR_IMAGE_URL = "https://i.postimg.cc/CK1n3s64/G919487998-0703-A01-1.png";
 const ADMIN_IDS = "7662568043"; // comma-separated Telegram user IDs (optional)
